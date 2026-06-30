@@ -1,23 +1,42 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './ExpenseManager.css';
 
-const API_URL = 'http://localhost:5000/api/transactions';
+const API_URL = 'http://localhost:5162/api/transactions';
 
 export default function ExpenseManager() {
   const [transactions, setTransactions] = useState([]);
   const [formData, setFormData] = useState({ amount: '', description: '' });
   const [editingId, setEditingId] = useState(null);
+  const navigate = useNavigate();
+  const username = localStorage.getItem('username');
 
   useEffect(() => {
     fetchTransactions();
   }, []);
 
+  const getHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    navigate('/login');
+  };
+
   const fetchTransactions = async () => {
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, { headers: getHeaders() });
       if (response.ok) {
         const data = await response.json();
         setTransactions(data);
+      } else if (response.status === 401) {
+        handleLogout();
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -40,28 +59,28 @@ export default function ExpenseManager() {
     };
 
     try {
+      let response;
       if (editingId) {
         transaction.id = editingId;
-        const response = await fetch(`${API_URL}/${editingId}`, {
+        response = await fetch(`${API_URL}/${editingId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getHeaders(),
           body: JSON.stringify(transaction)
         });
-        if (response.ok) {
-          setEditingId(null);
-          setFormData({ amount: '', description: '' });
-          fetchTransactions();
-        }
       } else {
-        const response = await fetch(API_URL, {
+        response = await fetch(API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getHeaders(),
           body: JSON.stringify(transaction)
         });
-        if (response.ok) {
-          setFormData({ amount: '', description: '' });
-          fetchTransactions();
-        }
+      }
+
+      if (response.ok) {
+        setEditingId(null);
+        setFormData({ amount: '', description: '' });
+        fetchTransactions();
+      } else if (response.status === 401) {
+        handleLogout();
       }
     } catch (error) {
       console.error('Error saving data:', error);
@@ -77,10 +96,13 @@ export default function ExpenseManager() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa?")) return;
     try {
       const response = await fetch(`${API_URL}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getHeaders()
       });
       if (response.ok) {
         fetchTransactions();
+      } else if (response.status === 401) {
+        handleLogout();
       }
     } catch (error) {
       console.error('Error deleting data:', error);
@@ -89,6 +111,11 @@ export default function ExpenseManager() {
 
   return (
     <div className="expense-container">
+      <div className="user-welcome">
+        <span>Xin chào, <strong>{username}</strong>!</span>
+        <button className="btn btn-logout" onClick={handleLogout}>Đăng xuất</button>
+      </div>
+
       <div className="expense-card">
         <h2>{editingId ? 'Sửa Khoản Chi' : 'Thêm Khoản Chi Mới'}</h2>
         <form onSubmit={handleSubmit} className="expense-form">
